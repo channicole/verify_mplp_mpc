@@ -10,34 +10,27 @@
 % For now, we only "refine covers" of the initial set, not subsequent
 % reachsets. Furthermore, we do not search for counterexamples and decouple
 % this function from safety certification.
-function safe=verify_mplp_mpc(Theta,MPCsol,plantModel,THorizon)
-% %% Set up
-% clc; clear all; %close all;
-% dbstop if error
-% % profile on
-
+function safe=verify_mplp_mpc(inputFile)
 %% Setup
-safe = -1; % -1: UNKNOWN, 0: UNSAFE, 1: SAFE
-partitionBnd = 10; % max number of partitions that may occur before returning unknown
-partitionNum = 0;
+safe = -1;                          % -1: UNKNOWN, 0: UNSAFE, 1: SAFE
 
-Reach_Theta = reachtube(Theta);
-time_span = THorizon; 
-
-    % Create ODE function
-    function dX=modelFun(t,X)
-        dX=zeros(dim_x,1);
-
-        %% Closed-loop system
-        ui = simTrace.F{i}*X+simTrace.G{i};
-        dX = plantModel(X,ui);
+% Load user input from the file in the input arg
+inParams = inputFile();             % instantiates function handles to each input entity needed from user
+inFunNames = fieldnames(inParams);  % get function handle names from user input, stored in a cell array
+if length(inFunNames) ~= 6          % TODO: update with inputParams
+    error('Incorrect number of function handles. Follow template for the inputParams() method.');
+else
+    template = {'flowEq';'modelJac';'unsafeStates';'initStates';'verifyParams';'MPCprob'}; % TODO: update with inputParms
+    if isempty(setdiff(inFunNames,template))
+        error('Incorrect function handle names. Follow template for the inputParams() method.');
     end
+end
 
-% %% initialize 
-% start = 1; % index of starting cover
-% queue(start) = cover(initial_state,time_span(1),[],[],[],[],initial_diameter,dim,start,0);
-% lastID = 1;
-% head = queue(start).Next;
+% TODO: Check the parameters in each function for correctness
+
+%% Compute the MPC solution
+[~,OptSol] = MPC_to_mpLP(inParams.MPCprob);
+[Pn,F,G,~,~,~] = MPCsol(OptSol);
 
 %% Safety Verification
 tic;

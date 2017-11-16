@@ -1,16 +1,16 @@
 % Author:   Nicole Chan
 % Created:  10/6/17
-% Description: The 'reachtube' object is a subclass of the doubly-linked 
+% Description: The 'reachtubeObj' object is a subclass of the doubly-linked 
 % list node. It represents a polyhedral subset of the state-space that
 % contains all the reachable states over the time horizon 'T'. More
 % specifically, it contains all the reachsets R_i, for all i in T, where 
 % R_i is the reachable states over t in [t_{i-1},t_{i}).
 %
-% Each reachtube that gets generated has its own ID. An initial set
+% Each reachtubeObj that gets generated has its own ID. An initial set
 % of states may be partitioned to create sub-reachtubes, which are referred
-% to as children of the original parent reachtube object.
+% to as children of the original parent reachtubeObj object.
 %
-classdef reachtube < dlnode
+classdef reachtubeObj < dlnode
     properties
         Theta   % initial set of states
         x0      % initial state in Theta to simulate from
@@ -25,38 +25,44 @@ classdef reachtube < dlnode
     end
     
     methods
-        function c = reachtube(Theta,x0,Y,Yup,Ylow,T,dia,dim,ID,parent) % constructor
-            if nargin < 10
+        function c = reachtubeObj(Theta,x0,xi,MPCi,Reach,T,dia,ID,parID) % constructor
+            c = c@dlnode();
+            if nargin == 0
+                c.Theta = [];
+                c.x0 = [];
+                c.xi = [];
+                c.MPCi = [];
+                c.Reach = [];
+                c.T = [];
+                c.dia = [];
+                c.ID = [];
+                c.parID = [];
+                c.childID = [];
+            elseif nargin == 9
+                c.Theta = Theta;
+                c.x0 = x0;
+                c.xi = xi;
+                c.MPCi = MPCi;
+                c.Reach = Reach;
+                c.T = T;
+                c.dia = dia;
+                c.ID = ID;
+                c.parID = parID;
+                c.childID = [];
+            else
                 error('Incorrect number of arguments')
             end
-            if length(dia)~=dim
-                error('Incorrect dimension for "dia"')
-            end
-            if length(x0)<dim
-                error('Incorrect dimension for "x0"')
-            end
-            c = c@dlnode();
-            c.x0 = x0;
-            c.t0 = t0;
-            c.Y = Y;
-            c.Yup = Yup;
-            c.Ylow = Ylow;
-            c.T = T;
-            c.dia = dia;
-%             c.dim = dim;
-            c.ID = ID;
-            c.parent = parent;
-            c.children = [];
         end
-        function c = newCover(cov,i)
-            % Creates new cover from the reachset at cov(i) 
+        function c = union(c,inReach)
             if nargin < 2
                 error('Incorrect number of arguments')
             end
-            dim = length(cov.dia);
-            newDia = (cov.Yup(i,1:dim)-cov.Ylow(i,1:dim))./2;
-            c = cover(cov.Y(i,:),cov.T(i),cov.Y(i,:),cov.Yup(i,:),...
-                cov.Ylow(i,:),cov.T(i),newDia,dim,cov.ID,cov.parent);
+            [~,ind1,ind2] = intersect(c.T,inReach.T);
+            for i=1:length(ind1)
+                c.Reach(ind1(i)).Union(inReach.Reach(ind2(i)));
+            end
+            ind2 = setdiff((1:length(inReach.T))',ind2);
+            c.Reach(end+1:end+length(ind)) = inReach.Reach(ind2);
         end
         function cov = reduceCover(cov,i)
             % Creates new cover from the reachset at cov(i) 
@@ -78,7 +84,7 @@ classdef reachtube < dlnode
             % Updates cov to be union with newCov(i)
             % Used with single reachset cov for nextRegions
             % Used with multiple reachsets and vector i for stitching
-            % together a reachtube in computeReachtube
+            % together a reachtubeObj in computeReachtube
             if nargin < 3
                 error('Incorrect number of arguments')
             end
