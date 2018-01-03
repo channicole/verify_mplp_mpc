@@ -5,8 +5,8 @@
 %
 classdef stack < handle
     properties
-        items   % objects in stack
-        last    % index of last object in stack
+        items = stack.empty;    % objects in stack
+        last  = [];             % index of last object in stack
     end
     
     methods
@@ -49,7 +49,7 @@ classdef stack < handle
         end
         function y = getLast(s)
           if s.last~=0
-              y = s.items(s.last); 
+              y = s.items{s.last}; 
           else
               y = [];
           end
