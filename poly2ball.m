@@ -8,8 +8,6 @@
 % 'invariantRegions' (or 'Pn' from MPC solution) is a Polyhedron-array
 % 'inPolyhedron' must be a single Polyhedron (not array)
 %
-% TODO: return center state as a row vector (column corresponds to number
-% of intersecting regions)
 function [center,radius,outBall,outPoly,ind]=poly2ball(inPolyhedron,invariantRegions)
     % Initialize output variables
     center = [];
@@ -25,18 +23,19 @@ function [center,radius,outBall,outPoly,ind]=poly2ball(inPolyhedron,invariantReg
 
         % Compute center state from the ball and return largest radius
         center = zeros(1,inPolyhedron.Dim());
-        radius = 0;
+        radius = zeros(inPolyhedron.Dim(),1);
         for i=1:inPolyhedron.Dim()
-            rad = max(outBall.V(:,i))-min(outBall.V(:,i))/2;
+            rad = (max(outBall.V(:,i))-min(outBall.V(:,i)))/2;
             center(i) = min(outBall.V(:,i)) + rad;
-            if rad > radius
-                radius = rad;
-            end
+            radius(i) = rad;
+%             if rad > radius
+%                 radius = rad;
+%             end
         end
-        
+        center = center';
     % If we want to first check for intersection with different modes and
     % return corresponding ball-covers
-    elseif nargin==2
+    elseif nargin==2 && length(inPolyhedron)==1
         % Intersect inPolyhedron with invariantRegions 
         intRegions = invariantRegions & inPolyhedron;
         
@@ -51,16 +50,18 @@ function [center,radius,outBall,outPoly,ind]=poly2ball(inPolyhedron,invariantReg
         
         % Return array of center states and corresponding largest radii
         center = zeros(length(outPoly),inPolyhedron.Dim());
-        radius = zeros(length(outPoly),1);
+        radius = zeros(length(outPoly),inPolyhedron.Dim());
         for j=1:length(outPoly)
             for i=1:inPolyhedron.Dim()
-                rad = max(outBall(j).V(:,i))-min(outBall(j).V(:,i))/2;
+                rad = (max(outBall(j).V(:,i))-min(outBall(j).V(:,i)))/2;
                 center(j,i) = min(outBall(j).V(:,i)) + rad;
-                if rad > radius(j)
-                    radius(j) = rad;
-                end
+                radius(j,i) = rad;
+%                 if rad > radius(j)
+%                     radius(j) = rad;
+%                 end
             end
         end
     end
+    
     
 end

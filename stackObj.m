@@ -3,14 +3,14 @@
 % Description: Implementation for a stack. Dynamically resizes with each
 % push and pop.
 %
-classdef stack < handle
+classdef stackObj < handle
     properties
         items = stack.empty;    % objects in stack
         last  = [];             % index of last object in stack
     end
     
     methods
-        function s = stack(obj)
+        function s = stackObj(obj)
             if nargin == 1
                 if iscell(obj)
                     dim = numel(obj);

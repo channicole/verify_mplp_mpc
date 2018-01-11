@@ -3,8 +3,15 @@
 % Description: Takes a radius and outputs a ball (tbd which norm and which
 % data struct) of that radius centered at 0.
 %
-function ball=getBall(dim,radius)
-    ball = Polyhedron('lb', -radius*ones(dim, 1), 'ub', radius*ones(dim, 1));
+function ball=getBall(dim,radius,center)
+    if nargin == 3 && length(center) == dim
+        if isrow(center)
+            center = center';
+        end
+        ball = Polyhedron('lb', center-radius*ones(dim, 1), 'ub', center+radius*ones(dim, 1));
+    else
+        ball = Polyhedron('lb', -radius*ones(dim, 1), 'ub', radius*ones(dim, 1));
+    end
 %     % Compute all vertices of the box centered at origin (basically
 %     % combination with replacement)
 %     vals = [-radius,radius];

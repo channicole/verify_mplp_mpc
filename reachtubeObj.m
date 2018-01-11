@@ -1,58 +1,69 @@
 % Author:   Nicole Chan
 % Created:  10/6/17
-% Description: The 'reachtubeObj' object is a subclass of the doubly-linked 
-% list node. It represents a polyhedral subset of the state-space that
-% contains all the reachable states over the time horizon 'T'. More
-% specifically, it contains all the reachsets R_i, for all i in T, where 
+% Description: The 'reachtubeObj' object represents a polyhedral subset of 
+% the state-space that contains all the reachable states over the time 
+% horizon 'T'.
+% It contains all the reachsets R_i, for all i in T, where 
 % R_i is the reachable states over t in [t_{i-1},t_{i}).
 %
-% Each reachtubeObj that gets generated has its own ID. An initial set
-% of states may be partitioned to create sub-reachtubes, which are referred
-% to as children of the original parent reachtubeObj object.
-%
-classdef reachtubeObj < dlnode
-    properties
-        Theta   % initial set of states
-        x0      % initial state in Theta to simulate from
-        xi      % nominal trajectory simulated
-        MPCi    % affine control solution applied
-        Reach   % reachsets (Reach(T(1))=Theta)
-        T       % discrete time steps
-        dia     % dim-dimensional vector of cover diameters
-        ID      % array position if array is used to contain pointers
-        parID   % parent node's ID
-        childID % array of children IDs
+classdef reachtubeObj < handle
+    properties (Access = public)
+        Theta   % Polyhedron: initial set of states
+%         x0      % n-length vector: initial state in Theta to simulate from
+        xi      % k-length array of n-length vectors: nominal trajectory simulated
+        MPCi    % k-length array of MPC-objects: affine control solution applied
+%         Reach   % k-length array of Polyhedron: reachsets (Reach(T(1))=Theta)
+        T       % k-length vector: discrete time steps
+%         rad     % n-length vector: radius of the ball approximation of Theta
+    end
+    % The following members represent the hyperrectangular approximation of
+    % Theta. The Polyhedron representation is stored in Reach(1,:). Its
+    % center state and radius is stored in x0 and rad, respectively.
+    properties (Access = protected)
+        x0      % n-length vector: initial state in Theta to simulate from
+        Reach   % k-length array of Polyhedron: reachsets (Reach(T(1))=Theta)
+        rad     % n-length vector: radius of the ball approximation of Theta
     end
     
     methods
-        function c = reachtubeObj(Theta,x0,xi,MPCi,Reach,T,dia,ID,parID) % constructor
-            c = c@dlnode();
-            if nargin == 0
-                c.Theta = [];
-                c.x0 = [];
-                c.xi = [];
-                c.MPCi = [];
-                c.Reach = [];
-                c.T = [];
-                c.dia = [];
-                c.ID = [];
-                c.parID = [];
-                c.childID = [];
-            elseif nargin == 9
-                c.Theta = Theta;
-                c.x0 = x0;
-                c.xi = xi;
-                c.MPCi = MPCi;
-                c.Reach = Reach;
-                c.T = T;
-                c.dia = dia;
-                c.ID = ID;
-                c.parID = parID;
-                c.childID = [];
+        function reach = reachtubeObj(Theta,x0,xi,MPCi,Reach,T,rad) % constructor
+            if nargin == 7
+                reach.Theta = Theta;
+                reach.x0 = x0;
+                reach.xi = xi;
+                reach.MPCi = MPCi;
+                reach.Reach = Reach;
+                reach.T = T;
+                reach.rad = rad;
             else
                 error('Incorrect number of arguments')
             end
         end
+        
+        function reach = updateReach(reach,newReach)
+            if size(newReach,1) == 1
+                reach.Reach = newReach.outerApprox();
+                reach.rad = transpose(max(reach.Reach)-min(reach.Reach));
+            elseif ~isempty(newReach)
+                % % NOTE: currently assumes each Polyhedron-element of
+                % newReach is already approximated by a ball/box
+                reach.Reach = newReach;
+                reach.rad = transpose(max(reach.Reach(1,:))-min(reach.Reach(1,:)));
+            else
+                warning('Input is an empty variable, so member not updated.')
+            end
+        end
+        
+        function reach = copyObject(inReach,reach)
+            C = metaclass(inReach);
+            P = C.Properties;
+            for k=1:length(P)
+                if ~P{k}.Dependent
+                    reach.(P{k}.Name) = input.(P{k}.Name);
+                end
+            end
+        end
+        
         function c = union(c,inReach)
             if nargin < 2
                 error('Incorrect number of arguments')
@@ -69,7 +80,7 @@ classdef reachtubeObj < dlnode
             if nargin < 2
                 error('Incorrect number of arguments')
             end
-            dim = length(cov.dia);
+            dim = length(cov.rad);
             newDia = (cov.Yup(i,1:dim)-cov.Ylow(i,1:dim))./2;
             
             cov.x0 = cov.Y(i,:);
@@ -78,7 +89,7 @@ classdef reachtubeObj < dlnode
             cov.Yup = cov.Yup(i,:);
             cov.Ylow = cov.Ylow(i,:);
             cov.T = cov.T(i);
-            cov.dia = newDia;
+            cov.rad = newDia;
         end
         function cov = coverUnion(cov,newCov,i)
             % Updates cov to be union with newCov(i)
@@ -92,13 +103,13 @@ classdef reachtubeObj < dlnode
                 error('Number of reachsets in cover does not match number of indices specified')
             end
             loc = cov.x0(end); % added to track nondet trans to passive
-            dim = length(cov.dia);
+            dim = length(cov.rad);
             cov.Yup = max(cov.Yup,newCov.Yup(i,:));
             cov.Ylow = min(cov.Ylow,newCov.Ylow(i,:));
-            cov.dia = (cov.Yup(1,1:dim)-cov.Ylow(1,1:dim))./2; % radius
+            cov.rad = (cov.Yup(1,1:dim)-cov.Ylow(1,1:dim))./2; % radius
             cov.T = max(cov.T,newCov.T(i));
             cov.t0 = cov.T(1);
-            cov.x0 = cov.Ylow(1,1:dim)+cov.dia; % need to update support vars
+            cov.x0 = cov.Ylow(1,1:dim)+cov.rad; % need to update support vars
             cov.x0 = ARPOD_update(cov.x0,cov.t0,loc); % help differentiate passive
             cov.Y = cov.x0; % need to update support vars
         end
@@ -112,7 +123,7 @@ classdef reachtubeObj < dlnode
             cov.Y = vertcat(cov.Y,newCov.Y);
             cov.Yup = vertcat(cov.Yup,newCov.Yup);
             cov.Ylow = vertcat(cov.Ylow,newCov.Ylow);
-%             cov.dia = vertcat(cov.dia,newCov.dia);
+%             cov.rad = vertcat(cov.rad,newCov.rad);
         end
         function addChildren(cov,children)
             cov.children = children;
@@ -151,7 +162,7 @@ classdef reachtubeObj < dlnode
             cov.Yup = newCov.Yup;
             cov.Ylow = newCov.Ylow;
             cov.T = newCov.T;
-            cov.dia = newCov.dia;
+            cov.rad = newCov.rad;
             cov.children = [];
         end
     end % end methods
