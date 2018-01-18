@@ -8,13 +8,12 @@
 % 'invariantRegions' (or 'Pn' from MPC solution) is a Polyhedron-array
 % 'inPolyhedron' must be a single Polyhedron (not array)
 %
-function [center,radius,outBall,outPoly,ind]=poly2ball(inPolyhedron,invariantRegions)
+function [center,radius,outBall,outPoly]=poly2ball(inPolyhedron,invariantRegions)
     % Initialize output variables
     center = [];
     radius = [];
     outBall = [];
     outPoly = inPolyhedron;
-    ind = [];
     
     % If we just want the ball to cover the input polyhedron:
     if nargin==1
@@ -22,15 +21,12 @@ function [center,radius,outBall,outPoly,ind]=poly2ball(inPolyhedron,invariantReg
         outBall = inPolyhedron.outerApprox();
 
         % Compute center state from the ball and return largest radius
-        center = zeros(1,inPolyhedron.Dim());
+        center = zeros(inPolyhedron.Dim(),1);
         radius = zeros(inPolyhedron.Dim(),1);
         for i=1:inPolyhedron.Dim()
             rad = (max(outBall.V(:,i))-min(outBall.V(:,i)))/2;
             center(i) = min(outBall.V(:,i)) + rad;
             radius(i) = rad;
-%             if rad > radius
-%                 radius = rad;
-%             end
         end
         center = center';
     % If we want to first check for intersection with different modes and
@@ -40,10 +36,7 @@ function [center,radius,outBall,outPoly,ind]=poly2ball(inPolyhedron,invariantReg
         intRegions = invariantRegions & inPolyhedron;
         
         % Return array of polyhedra (non-empty intersections)
-        ind = find(intRegions.isFullDim());
-        outPoly = intRegions(ind);
-        % Update to remove redundant polyhedra
-%         outPoly = 
+        outPoly = intRegions(intRegions.isFullDim());
         
         % Return array of ball-approximations
         outBall = outPoly.outerApprox();
@@ -56,12 +49,7 @@ function [center,radius,outBall,outPoly,ind]=poly2ball(inPolyhedron,invariantReg
                 rad = (max(outBall(j).V(:,i))-min(outBall(j).V(:,i)))/2;
                 center(j,i) = min(outBall(j).V(:,i)) + rad;
                 radius(j,i) = rad;
-%                 if rad > radius(j)
-%                     radius(j) = rad;
-%                 end
             end
         end
-    end
-    
-    
+    end  
 end

@@ -28,6 +28,9 @@ classdef reachtubeObj < handle
     methods
         function reach = reachtubeObj(Theta,x0,xi,MPCi,Reach,T,rad) % constructor
             if nargin == 7
+                if isrow(x0); x0 = x0'; end;
+                if iscolumn(xi); xi = xi'; end;
+                if isrow(rad); rad = rad'; end;
                 reach.Theta = Theta;
                 reach.x0 = x0;
                 reach.xi = xi;
@@ -39,21 +42,42 @@ classdef reachtubeObj < handle
                 error('Incorrect number of arguments')
             end
         end
-        
+        % Concatenates reachtube from 'newReach' into 'reach'
+        function reach = reachUnion(reach,newReach)
+            if nargin~=2
+                error('Incorrect number of arguments.')
+            end
+            [~,i,j] = intersect(reach.T,newReach.T);
+            for k=1:length(i)
+                reach.Reach(i(k),:) = reach.Reach(i(k),:) + newReach.Reach(j(k),:);
+            end
+            k = setdiff((1:length(newReach.T))',j);
+            reach.Reach(end+1:end+length(k),:) = newReach.Reach(k,:);
+        end
+        % Updates the reachtube/set members
+        % TODO: currently does not check that the newReach actually
+        % corresponds with reach.T
         function reach = updateReach(reach,newReach)
-            if size(newReach,1) == 1
-                reach.Reach = newReach.outerApprox();
-                reach.rad = transpose(max(reach.Reach)-min(reach.Reach));
-            elseif ~isempty(newReach)
-                % % NOTE: currently assumes each Polyhedron-element of
-                % newReach is already approximated by a ball/box
+            if size(newReach,1) == 1 
+                [reach.x0,reach.rad,reach.Reach,~] = poly2ball(newReach);
+            elseif ~isempty(newReach) % if newReach has reachsets for multiple time-steps
                 reach.Reach = newReach;
-                reach.rad = transpose(max(reach.Reach(1,:))-min(reach.Reach(1,:)));
+                [reach.x0,reach.rad,~,~] = poly2ball(newReach(1));
             else
-                warning('Input is an empty variable, so member not updated.')
+                warning('Input is a handle to an empty object, so member not updated.')
             end
         end
-        
+        % Returns a bool on whether the reachtube/set has been computed yet
+        function flag = needsPost(inReach)
+            flag = (size(inReach.Reach,1)<2); % based on the assumption that min length of inReach.T is 2, so if computed already then there should be at least two corresponding sets
+        end
+        % Returns the protected properties
+        function [x0,rad,Reach] = getProperties(inReach)
+            x0 = inReach.x0;
+            rad = inReach.rad;
+            Reach = inReach.Reach;
+        end
+%%%%%%%% CHECK REMAINING METHODS %%%%%%%%        
         function reach = copyObject(inReach,reach)
             C = metaclass(inReach);
             P = C.Properties;

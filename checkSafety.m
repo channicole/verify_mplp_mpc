@@ -5,16 +5,32 @@
 % points to). Returns true if the intersection is empty, and false 
 % otherwise.
 %
+% NOTE: both reachtube and unsafeSet should be arrays of Polyhedron()
+%
 function safeflag=checkSafety(reachtube,unsafeSet)
     safeflag = 1;
-    % Check each reachset in the reachtube
-    for i = 1:length(reachtube)     % TODO: replace length() or add to class
-        % Check each reachset against each unsafe set
-        for j = 1:length(unsafeSet) % TODO: replace length()
-            if ~isEmptySet(reachtube(i) & unsafeSet(j))
-                safeflag = 0;
-                return;
+    
+    % Check each property
+    for i = 1:length(unsafeSet.safe)
+        % If the property specified is the safe set (i.e. complement of
+        % unsafe), then check the reachtube is contained in this set
+        if unsafeSet.safe(i)
+            for j = 1:length(reachtube)
+                if ~isEmptySet(reachtube(j)\unsafeSet.region(i,:))
+%                 if ~unsafeSet.region(i).contains(reachtube(j))
+                    safeflag = 0;
+                    return;
+                end
             end
-        end
-    end  
+        % Else if the property specified is the unsafe set, check the 
+        % reachtube does not intersect with this set
+        else
+            for j = 1:length(reachtube)
+                if any(~isEmptySet(unsafeSet.region(i,:) & reachtube(j)))
+                    safeflag = 0;
+                    return;
+                end
+            end
+        end  
+    end
 end

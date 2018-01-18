@@ -2,8 +2,11 @@
 % Created:  1/9/18
 % Description: 
 %
-classdef safetyEnum < handle
+classdef safetyEnum < int8
     enumeration
-        RobustSafe, NotSafe, NeedReach, ExitPartitionBnd
+        RobustSafe  (1)
+        NotSafe     (0)
+        NeedReach   (-1)
+        ExitPartitionBnd (-2)
     end
 end

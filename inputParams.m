@@ -7,9 +7,9 @@ function funHand=inputParams()
     % formulation, and verification parameters
     funHand.flowEq = @flowModel;        % ODEs in each discrete mode (possibly nonlinear)
     funHand.modelJac = @modelJacobian;  % Jacobian in each mode
-    funHand.unsafeStates = @unsafeSet;  % Sets of unsafe states
+    funHand.unsafeStates = unsafeSet;   % Sets of unsafe states
     funHand.initStates = @initialSet;   % Initial set of states for verification
-    funHand.verifyParams = @verificationParams; % Time horizon, error terms, sim step-size
+    funHand.vPar = verificationParams;  % Time horizon, error terms, sim step-size
     funHand.MPCprob = @MPCprob;         % Linear, discrete-time plant model used to design MPC sol
 end
 
@@ -82,12 +82,12 @@ function X0=initialSet()
     X0 = Polyhedron();
 end
 
-function [Thorizon,simStep,delta,maxPart,LipConst,epsilonConst]=verificationParams() 
-    Thorizon = [0,100];     % verification time horizon
-    simStep = 0.01;         % (fixed) simulation step size
-    delta = [];             % sampling step size (same as what's used for discrete-time model and MPC period)
-    maxPart = 10;           % maximum number of partitions taken per mode before returning an UNKNOWN result
-    LipConst = 1;           % Lipschitz constant
-    epsilonConst = 0;       % upper bound on simulation error
+function vPar=verificationParams() 
+    vPar.Thorizon = [0,100];     % verification time horizon
+    vPar.simStep = 0.01;         % (fixed) simulation step size
+    vPar.deltaStep = 1           % sampling step size (same as what's used for discrete-time model and MPC period)
+    vPar.maxPart = 10;           % maximum number of partitions taken per mode before returning an UNKNOWN result
+    vPar.LipConst = 1;           % Lipschitz constant
+    vPar.epsilonConst = 0;       % upper bound on simulation error
     
 end

@@ -10,87 +10,124 @@
 % For now, we only "refine covers" of the initial set, not subsequent
 % reachsets. Furthermore, we do not search for counterexamples and decouple
 % this function from safety certification.
-function safe=verify_mplp_mpc(inputFile)
+%
+function safe=verify_mplp_mpc(inParams)
 %% Setup
 safe = -1;                          % -1: UNKNOWN, 0: UNSAFE, 1: SAFE
 
 % Load user input from the file in the input arg
-inParams = inputFile();             % instantiates function handles to each input entity needed from user
+% inParams = inputFile();             % instantiates function handles to each input entity needed from user
 inFunNames = fieldnames(inParams);  % get function handle names from user input, stored in a cell array
-if length(inFunNames) ~= 6          % TODO: update with inputParams
+if length(inFunNames) < 6           % TODO: update with inputParams
     error('Incorrect number of function handles. Follow template for the inputParams() method.');
 else
-    template = {'flowEq';'modelJac';'unsafeStates';'initStates';'verifyParams';'MPCprob'}; % TODO: update with inputParms
-    if isempty(setdiff(inFunNames,template))
+    template = {'flowEq';'modelJac';'unsafeStates';'initStates';'vPar';'MPCprob'}; % TODO: update with inputParms
+    if ~isempty(setdiff(template,inFunNames))
         error('Incorrect function handle names. Follow template for the inputParams() method.');
     end
 end
 
 % TODO: Check the parameters in each function for correctness
 
-% Introduce a 'global' variable to keep track of assigning unique IDs
-UID = 0;
+%% Compute the MPC solution if one isn't already specified
+if ~isempty(setdiff('MPCsol',inFunNames))
+    [~,OptSol] = MPC_to_mpLP(inParams.MPCprob);
+    [sol.Pn,sol.F,sol.G,~,~,~] = MPCsolve(OptSol);
+    inParams.MPCsol = sol; % add the MPC solution to the inParams struct
+end
 
-%% Compute the MPC solution
-[~,OptSol] = MPC_to_mpLP(inParams.MPCprob);
-[Pn,F,G,~,~,~] = MPCsol(OptSol);
-
-%% Safety Verification: Generate reachtubes using DFS
+%% Safety Verification: Generate covers using DFS
 tic;
 
-% Create stack and push user-specified initial set to stack
-Theta = inParams.initStates;
-Thorizon = inParams.verificationParams;
-covers = stack(reachtubeObj(Theta,[],[],[],[],Thorizon,[],UID,[])); 
-UID = UID+1;
+% Get the time horizon desired for the reachtube
+Thorizon = (inParams.vPar.Thorizon(1):inParams.vPar.simStep:inParams.vPar.Thorizon(end))';
+
+% Check if the cover intersects with multiple discrete mode invariants
+[x0,rad0,ball0,Theta0] = poly2ball(inParams.initStates,inParams.MPCsol.Pn);
+numRegions = size(rad0,1);
+
+if numRegions > 1
+    % Initialize tree of coverObj-objects
+    covTheta = coverObj(Theta0,[],[],[],[],Thorizon,[]);
+    CTree = tree(covTheta);
+    
+    % Add children covers with single mode covers
+    for i=1:numRegions
+        CTree.rootNode.insertChild(treeNode(coverObj(Theta0(i),x0(i,:)',...
+            x0(i,:),[],ball0(i),Thorizon,rad0(i,:)'),CTree.rootNode));
+    end
+elseif numRegions == 1 
+    % Initialize tree of coverObj-objects
+    covTheta = coverObj(Theta0,x0,x0',[],ball0,Thorizon,rad0);
+    CTree = tree(covTheta);
+else
+    error('Check MPC solution and initial set of states.');
+end
 
 % Compute the reachtubes for each corresponding 'cover' in the stack
-while (~covers.isempty)
-    % Get cover at the top of stack (don't pop until it's been checked)
-    currCov = covers.getLast();
-    
-    % If multiple modes are valid in Theta, partition into separate covers
-    % and add to stack (don't forget to update child/parIDs)
-    if isempty(currCov.Reach) % TODO: check initialization of each node to ensure Reach(1,:) is empty
-        % Get ball approximation of the initial set
-        [x0,deltaConst,ball0,poly0,indPn] = poly2ball(currCov.Theta,Pn);
-        
-        % Create reachtube object and push to stack (to be expanded into fuller reachtube)
-        for i=1:length(deltaConst)
-            % Get corresponding MPC solution for this particular mode
-            MPCi.F = F{indPn(i)}(Ny+Nu+1:Ny+Nu+dim_u,:);
-            MPCi.G = G{indPn(i)}(Ny+Nu+1:Ny+Nu+dim_u);
-            % Get (adjusted) time horizon??
+while ~isempty(CTree.currNode)
+    switch CTree.currNode.data.isSafe
+        % Quit program
+        case -2
+            CTree.currNode = treeNode.empty();
+            disp('Maximum number of partitions reached. Safety result unknown.');
             
-            cov = reachtubeObj(poly0(i),x0(i),[],MPCi,ball0(i),t,deltaConst(i),UID,currCov.ID); % inputs: Theta,x0,xi,MPCi,Reach,T,dia,ID,parID
-            covers.push(cov); 
-        end
-        
-        % Pop cover 
-        covers.pop;
-        % TODO: need to change stack to contain references/pointers/handles
-        % since need to keep some of the parent covers even though we
-        % remove them from stack
-    elseif isempty(currCov.ID)
-        % Parition according to time or something
-        
+        % Compute reachtube for the cover and check its safety
+        case -1
+            CTree.currNode = computeReach(CTree.currNode,inParams);
+            
+        % Partition the cover
+        case 0
+            if CTree.height == inParams.vPar.maxPart
+                CTree.currNode.data.setSafeFlag(safetyEnum.ExitPartitionBnd);
+            else
+                newCov = CTree.currNode.data.partitionCover();
+                for i=1:length(newCov)
+                    CTree.currNode.insertChild(treeNode(newCov{i},CTree.currNode));
+                end
+                % Update currNode pointer to left-most child
+                CTree.currNode = CTree.currNode.children.getItem(1);
+                % Update tree parameters
+                CTree.height = CTree.height + 1;
+                CTree.size = CTree.size + length(newCov);
+            end
+            
+        % Update currNode to next cover that needs to be checked
+        case 1
+            % Check for left sibling with safeFlag==1 
+            lSib = CTree.currNode.parent.children.getItem(1);
+            if lSib~=CTree.currNode
+                if lSib.isSafe~=1
+                    error('Left sibling cover should have had reachtube computed to be RobustlySafe.');
+                end
+                % Combine covers that have been computed in currNode and left sibling
+                CTree.currNode.data.coverUnion(lSib.data);
+                % Pop left sibling
+                CTree.currNode.parent.removeChild(1);
+                CTree.size = CTree.size - 1;
+            end
+            
+            % Check for existence of a right sibling
+            if CTree.currNode.parent.children.size > 1
+                CTree.currNode = CTree.currNode.parent.children.getItem(2);
+            else
+                % If no siblings left to check, then update parent:
+                % Copy child level to parent
+                CTree.currNode.parent = CTree.currNode;
+                % Update currNode to parent 
+                CTree.currNode = CTree.currNode.parent;
+                % Delete child
+                CTree.currNode.removeChild(1);
+                CTree.size = CTree.size - 1;
+                CTree.height = CTree.height - 1;
+                % Update safety flag
+                CTree.currNode.setSafeFlag('RobustSafe');
+            end
+            
+        otherwise
+            error('Not sure how you got here. This parameter is enumerated and should automatically be checked/generate an error.');
     end
-    
-    % Initialize Theta to top of stack
-    
-    % If length of T > Tsamp, then duplicate cover, change T(1) and push to
-    % stack and update current Theta
-    
-    % Call computeReachtube for T(1):T(1)+Tsamp (if T(2)-T(1) > Tsamp)
-    
-    % Push last reachset returned and adjust T(1):=T(1)+Tsamp (this becomes
-    % child of the current set) (if T(2)-T(1) > Tsamp)
-    
-    % Else: find parent, copy reachtube into parent (take union with 
-    % pre-exiting data if applicable), and pop
-    
-    
-end % end verification no covers left to check
+end
 toc;
 
 end

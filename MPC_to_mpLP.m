@@ -10,15 +10,36 @@
 % 
 % This is copied from ARCaDiA_MPC repo but with modified input argument
 
-function [mplp_prob,mplp_sol]=MPC_to_mpLP(modelParams)
+function [mplp_prob,mplp_sol,Fi,Gi]=MPC_to_mpLP(modelParams)
 %% Setup
 % Load variables from the file whose name is the string modelParams
 try
     load(modelParams,'dim_x','dim_u','dim_y','Nu','Ny','P','Q','R',...
         'xbnd','ubnd','ybnd','A','B','C');
 catch
-    error('Could not load parameters for MPC problem. Please follow template for MPCprob() function.');
+%     error('Could not load parameters for MPC problem. Please follow template for MPCprob() function.');
+    % Struct containing the parameters
+    try
+        A =     modelParams.A;
+        B =     modelParams.B;
+        C =     modelParams.C;
+        dim_x = modelParams.dim_x;
+        dim_u = modelParams.dim_u;
+        dim_y = modelParams.dim_y;
+        Nc =    modelParams.Nc;
+        Nu =    modelParams.Nu;
+        Ny =    modelParams.Ny;
+        P =     modelParams.P;
+        Q =     modelParams.Q;
+        R =     modelParams.R;
+        xbnd =  modelParams.xbnd;
+        ubnd =  modelParams.ubnd;
+        ybnd =  modelParams.ybnd;
+    catch
+        error('Please specify input file or the appropriate parameters in a struct.');
+    end
 end
+
 
 dim_e = Ny+Nu;              % number of slack variables
 dim_z = dim_e + dim_u*Nu;   % dimension of the recasted mpLP state vector
@@ -152,3 +173,13 @@ F = [F1;F2;F3;F4;F5;zeros(dim_e,dim_x)];
 mplp_prob = Opt('f',c','A',G,'b',w,'pB',F);
 mplp_sol = mplp_prob.solve();
 
+% If only using mpLP solution for MPC, remove slack vars from solution
+Fi = cell(1,mplp_sol.xopt.Num); 
+Gi = cell(1,mplp_sol.xopt.Num);
+if mplp_sol.xopt.Num>0
+    optimizer = mplp_sol.xopt.Set.getFunction('primal');
+    for i = 1:length(optimizer)
+        Fi{i} = optimizer(i).F(Ny+Nu+1:Ny+Nu+dim_u,:);
+        Gi{i} = optimizer(i).g(Ny+Nu+1:Ny+Nu+dim_u);
+    end
+end

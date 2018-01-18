@@ -4,13 +4,24 @@
 % data struct) of that radius centered at 0.
 %
 function ball=getBall(dim,radius,center)
+    if length(radius)==1
+        radius = radius*ones(dim,1);
+    end
     if nargin == 3 && length(center) == dim
         if isrow(center)
             center = center';
         end
-        ball = Polyhedron('lb', center-radius*ones(dim, 1), 'ub', center+radius*ones(dim, 1));
+        if isrow(radius)
+            radius = radius';
+        end
+        ball = Polyhedron('lb', center-radius, 'ub', center+radius);
+    elseif nargin == 2
+        if isrow(radius)
+            radius = radius';
+        end
+        ball = Polyhedron('lb', -radius, 'ub', radius);
     else
-        ball = Polyhedron('lb', -radius*ones(dim, 1), 'ub', radius*ones(dim, 1));
+        error('Check input arguments.');
     end
 %     % Compute all vertices of the box centered at origin (basically
 %     % combination with replacement)

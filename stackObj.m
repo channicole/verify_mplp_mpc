@@ -5,7 +5,7 @@
 %
 classdef stackObj < handle
     properties
-        items = stack.empty;    % objects in stack
+        items = stackObj.empty;    % objects in stack
         last  = [];             % index of last object in stack
     end
     

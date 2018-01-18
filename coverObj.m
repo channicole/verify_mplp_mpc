@@ -20,9 +20,10 @@
 %
 % NOTE: as of this iteration, we do not search for unsafe traces. 
 %
-classdef coverObj < reachtubeObj
-    properties
-        safeFlag   % indicates whether a reachtube has been computed yet and if it is safe
+classdef coverObj < handle
+    properties (Access = protected)
+        reachtube@reachtubeObj  % reachtube data associated with this cover
+        safeFlag@safetyEnum     % indicates whether a reachtube has been computed yet and if it is safe
     end
     
     methods
@@ -37,7 +38,7 @@ classdef coverObj < reachtubeObj
                 T = [];
                 rad = [];
             end
-            cover = cover@reachtubeObj(Theta,x0,xi,MPCi,Reach,T,rad);
+            cover.reachtube = reachtubeObj(Theta,x0,xi,MPCi,Reach,T,rad);
             cover.safeFlag = safetyEnum.NeedReach;
         end
         
@@ -52,18 +53,25 @@ classdef coverObj < reachtubeObj
             end
         end
         
+        % Check safeFlag
+        function flag = isSafe(cover)
+            flag = cover.safeFlag;
+        end
+        
+        % Return the superclass object
+        function rtube = getReachtube(cover)
+            rtube = cover.reachtube;
+        end
+        
         % Update the reachtube parameters
         function cover = updateReach(cover,inReach)
             if nargin ~= 2
                 error('Incorrect number of arguments')
             end
-            
-            cover.x0 = inReach.x0;
-            cover.xi = inReach.xi;
-            cover.MPCi = inReach.MPCi;
-            cover.Reach = inReach.Reach;
-            cover.T = inReach.T;
-            cover.rad = inReach.rad;
+            if ~isa(inReach,'reachObj')
+                error('Incorrect argument type.');
+            end
+            cover.reachtube = inReach;
         end
         
         % Partition the current cover and returns the resulting 2^n covers
@@ -73,20 +81,20 @@ classdef coverObj < reachtubeObj
                 error('Incorrect number of arguments')
             end
             
-            n = length(inCover.x0);
+            [inx0,inrad,~] = inCover.reachtube.getProperties();
+            n = length(inx0);
             outCovers = cell(2^n,1);
             
-            if length(inCover.x0)==n && length(inCover.rad)==n 
-                x0 = inCover.x0;
-                rad = inCover.rad;
+            if length(inx0)==n && length(inrad)==n 
+                x0 = inx0;
+                rad = inrad;
             else
                 % Get ball approximation of the initial set
-                [x0,rad] = poly2ball(inCover.Theta);
+                [x0,rad] = poly2ball(inCover.reachtube.Theta);
             end
-
-            if length(rad)~=n
-                error('Yo you got dimension issues with member variable rad');
-            end
+            
+            if iscolumn(x0); x0 = x0'; end;
+            if isrow(rad); rad = rad'; end;
             
             vals = [-0.5,0.5];
             X = cell(1, n);
@@ -94,17 +102,32 @@ classdef coverObj < reachtubeObj
             X = X(end : -1 : 1); 
             xcen = cat(n+1, X{:});
             xcen = reshape(xcen, [2^n, n]);
-            xcen = xcen*diag(rad) + repmat(x0',2^n,1);
+            xcen = xcen*diag(rad) + repmat(x0,2^n,1);
           
             rad = rad/2;
             for i=1:2^n
                 % Get hyperbox that approximates the i-th partition of inCover.Theta
                 boxTheta = Polyhedron('lb',xcen(i,:)'-rad,'ub',xcen(i,:)'+rad);
-                % Get precise partition of inCover.Theta using intersection
-                Theta = inCover.Theta & boxTheta;
+                % Get precise partition of inCover.reachtube.Theta using intersection
+                Theta = inCover.reachtube.Theta & boxTheta;
                 % Instantiate the coverObj for each partition
-                outCovers{i} = coverObj(Theta,xcen(i,:)',[],inCover.MPCi,boxTheta,inCover.T,rad);
+                outCovers{i} = coverObj(Theta,xcen(i,:)',[],inCover.reachtube.MPCi,boxTheta,inCover.reachtube.T,rad);
             end
+        end
+        
+        % Concatenates computed cover from 'newCov' into 'cover'
+        % TODO: currently only copies reachtube data, none of the other
+        % member variables --> check if this is needed
+        function cover = coverUnion(cover,newCov)
+            if nargin~=2
+                error('Incorrect number of arguments.')
+            end
+            [~,i,j] = intersect(cover.reachtube.T,newCov.reachtube.T);
+            for k=1:length(i)
+                cover.reachtube.Reach(i(k),:) = cover.reachtube.Reach(i(k),:) + newCov.reachtube.Reach(j(k),:);
+            end
+            k = setdiff((1:length(newCov.reachtube.T))',j);
+            cover.reachtube.Reach(end+1:end+length(k),:) = newCov.reachtube.Reach(k,:);
         end
     end % end methods
 end % end classdef

@@ -4,16 +4,16 @@
 %
 classdef treeNode < handle
     properties
-        data        % main node info
-        parent      % handle to parent node
-        children    % array of children node handles (for now, using custom implementation of stack)
+        data            % main node info
+        parent          % handle to parent node
+        children        % array of children node handles (for now, using custom implementation of list)
     end
     
     methods
         % Constructor
         function node = treeNode(data,parent,children)
-            if nargin < 3 || ~isa(children,'stackObj')
-                children = stackObj();
+            if nargin < 3 || ~isa(children,'listObj')
+                children = listObj();
             end
             if nargin < 2
                 parent = [];
@@ -37,24 +37,33 @@ classdef treeNode < handle
         % Check if this node is a leaf
         function flag = isLeaf(node)
             flag = 0;
-            if isempty(node.children)
+            if node.children.size==0
                 flag = 1;
             end
         end
         
-        % Update data
-        function node = setValue(node,newData)
-            node.data = newData;
-        end
+%         % Update data
+%         function node = setValue(node,newData)
+%             node.data = newData;
+%         end
         
         % Add child
         function node = insertChild(node,child)
-            node.children.push(child);
+            if isa(child,'treeNode')
+                child.parent = node;
+                node.children.push(child);
+            else
+                error('Input argument not of type treeNode.');
+            end
         end
         
-        % Remove child; NOTE: for now, just removes last added child
-        function node = removeChild(node)
-            node.children.pop();
+        % Remove child
+        function node = removeChild(node,ind)
+            if nargin==1
+                node.children.pop(); % TODO: does this properly delete the child?
+            elseif nargin==2
+                node.children.pop(ind); % TODO: does this properly delete the child?
+            end
         end
     end % end methods
 end % end classdef
